@@ -1,101 +1,286 @@
-import Image from "next/image";
+"use client";
+
+import { TimeString } from "@/utils/second-to-time-string";
+// import { io, Socket } from "socket.io-client";
+import { socket } from "../socket.js";
+
+import Hls from "hls.js";
+
+import {
+  FastForward,
+  Maximize,
+  Minimize,
+  Pause,
+  Play,
+  Rewind,
+  RotateCcw,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+// const socket: typeof Socket = io("https://gentle-heads-tap.loca.lt"); // Initialize Socket.IO client
+//
+
+type PlayBackType = {
+  eventType: "play" | "pause" | "restart" | "seek";
+  currentTime: number;
+};
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const videoRef = useRef<null | HTMLVideoElement>(null);
+  const videoContainerRef = useRef<null | HTMLDivElement>(null);
+  const [isMaximize, setIsMaximize] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [videoTotalTime, setVideoTotalTime] = useState(0);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // PLAYBACK FUNCTIONS FOR BUTTON =============================================
+  const handlePlayPause = () => {
+    console.log("Play or Pause");
+    if (!isPlaying) {
+      socket.emit("playback", { eventType: "play", currentTime: currentTime });
+    } else {
+      socket.emit("playback", { eventType: "pause", currentTime: currentTime });
+    }
+  };
+
+  const handleSeekBack = () => {
+    if (currentTime <= 10) {
+      socket.emit("playback", { eventType: "seek", currentTime: 0 });
+    } else {
+      socket.emit("playback", {
+        eventType: "seek",
+        currentTime: currentTime - 10,
+      });
+    }
+  };
+
+  const handleRestart = () => {
+    socket.emit("playback", { eventType: "restart", currentTime: 0 });
+  };
+
+  const handleSeekForward = () => {
+    if (videoTotalTime - currentTime <= 10) {
+      socket.emit("playback", {
+        eventType: "seek",
+        currentTime: videoTotalTime,
+      });
+    } else {
+      socket.emit("playback", {
+        eventType: "seek",
+        currentTime: currentTime + 10,
+      });
+    }
+  };
+
+  // MAXIMIZE MINIMIZE ==========================================================
+  const handleMaximizeUnmaximize = () => {
+    const videoContainer = videoContainerRef.current;
+    if (videoContainer) {
+      if (!isMaximize && document.fullscreenElement == null) {
+        setIsMaximize(true);
+        videoContainer.requestFullscreen();
+      } else {
+        setIsMaximize(false);
+        document.exitFullscreen();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (document.fullscreenElement != null) {
+        setIsMaximize(true);
+      } else {
+        setIsMaximize(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  });
+
+  // HLS VIDEO PLAYER ===========================================================
+  useEffect(() => {
+    if (Hls.isSupported()) {
+      console.log("Hello HLS.js!");
+      const hls = new Hls();
+      hls.loadSource(
+        "https://jordan-jack-12.github.io/media-server-personal/hls/output.m3u8",
+      );
+      hls.attachMedia(videoRef.current!);
+    }
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      const updateCurrentTime = () => {
+        setCurrentTime(video.currentTime);
+      };
+      const loadMetaData = () => {
+        setVideoTotalTime(video.duration);
+      };
+      video.addEventListener("timeupdate", updateCurrentTime);
+      video.addEventListener("loadedmetadata", loadMetaData);
+    }
+  }, []);
+
+  useEffect(() => {
+    socket.on("connect", () => {
+      console.log("Connection established");
+    });
+
+    // LISTENING FROM THE SERVER ===================================================
+    socket.on("playback", (data: PlayBackType) => {
+      const video = videoRef.current;
+      if (video) {
+        if (data.eventType == "pause") {
+          video.currentTime = data.currentTime;
+          video.pause();
+          setIsPlaying(false);
+        } else if (data.eventType == "play") {
+          video.currentTime = data.currentTime;
+          video.play();
+          setIsPlaying(true);
+        } else if (data.eventType == "restart") {
+          video.pause();
+          video.currentTime = 0;
+        } else if (data.eventType == "seek") {
+          video.currentTime = data.currentTime;
+        }
+      }
+    });
+
+    return () => {
+      socket.off("connect");
+      socket.off("playback");
+    };
+  }, []);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        padding: "20px",
+        background: "#000000",
+        height: "100%",
+      }}
+    >
+      <div
+        className="relative"
+        ref={videoContainerRef}
+        onDoubleClick={(e) => e.preventDefault()} // Disable double-click fullscreen
+        onKeyDown={(e) => e.preventDefault()} // Prevent keyboard fullscreen triggers
+      >
+        <video
+          ref={videoRef}
+          className={`${isMaximize ? "w-full h-full" : "w-[720px] md:h-[70vh] mb-8 outline-2 outline-white border-2 border-white rounded-md"}`}
+        ></video>
+        <div
+          className={`${!isMaximize ? "hidden" : "absolute bottom-0 left-0 w-full flex items-center p-4 bg-black/60 text-white transition-opacity duration-300"}`}
+        >
+          {/*Left side*/}
+          <div className="flex">
+            <button
+              onClick={handleSeekBack}
+              className="text-white py-2 px-4 rounded-md"
+            >
+              <Rewind />
+            </button>
+            <button
+              onClick={handlePlayPause}
+              className="text-white py-2 px-4 rounded-md"
+            >
+              {isPlaying ? <Pause /> : <Play />}
+            </button>
+            <button
+              onClick={handleSeekForward}
+              className="text-white py-2 px-4 rounded-md"
+            >
+              <FastForward />
+            </button>
+          </div>
+
+          {/* Timeline bar*/}
+          <div className="rounded-md flex-1 flex justify-between items-center">
+            <h1 className="text-white">{TimeString(currentTime)}</h1>
+            <div className="w-full m-2 h-2 bg-slate-700 rounded-md flex items-start flex-1">
+              <div
+                className="bg-slate-50 h-full rounded-md"
+                style={{ width: `${(currentTime / videoTotalTime) * 100}%` }}
+              ></div>
+            </div>
+            <h1 className="text-white">{TimeString(videoTotalTime)}</h1>
+          </div>
+
+          {/* Right side */}
+          <div className="flex justify-end items-center">
+            <button
+              onClick={handleRestart}
+              className="text-white py-2 px-4 rounded-md"
+            >
+              <RotateCcw />
+            </button>
+            <button
+              onClick={handleMaximizeUnmaximize}
+              className="text-white py-2 px-4 rounded-md"
+            >
+              {isMaximize ? <Minimize /> : <Maximize />}
+            </button>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+      </div>
+
+      <div className="min-w-full rounded-md">
+        <div className="w-full m-2 h-5 bg-slate-700 rounded-md flex items-start">
+          <div
+            className="bg-slate-50 h-full rounded-md"
+            style={{ width: `${(currentTime / videoTotalTime) * 100}%` }}
+          ></div>
+        </div>
+        <div className="w-full flex justify-between mx-2">
+          <h1 className="text-white">{TimeString(currentTime)}</h1>
+          <h1 className="text-white">{TimeString(videoTotalTime)}</h1>
+        </div>
+      </div>
+
+      <div className="*:m-2 flex">
+        <button
+          onClick={handleRestart}
+          className="bg-white text-black py-2 px-4 rounded-md"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          <RotateCcw />
+        </button>
+        <button
+          onClick={handleSeekBack}
+          className="bg-white text-black py-2 px-4 rounded-md"
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          <Rewind />
+        </button>
+        <button
+          onClick={handlePlayPause}
+          className="bg-white text-black py-2 px-4 rounded-md"
         >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          {isPlaying ? <Pause /> : <Play />}
+        </button>
+        <button
+          onClick={handleSeekForward}
+          className="bg-white text-black py-2 px-4 rounded-md"
+        >
+          <FastForward />
+        </button>
+        <button
+          onClick={handleMaximizeUnmaximize}
+          className="bg-white text-black py-2 px-4 rounded-md"
+        >
+          {isMaximize ? <Minimize /> : <Maximize />}
+        </button>
+      </div>
     </div>
   );
 }
