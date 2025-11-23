@@ -104,24 +104,7 @@ export default function Home() {
   });
 
   useEffect(() => {
-    const fecthVideoUrl = async () => {
-      try {
-        const apiUrl =
-          process.env.NEXT_PUBLIC_DEV_ENV === "1"
-            ? "http://localhost:3001"
-            : process.env.NEXT_PUBLIC_SOCKETURL!;
-        const res = await fetch(`${apiUrl}/video-url`, {
-          method: "GET",
-        });
-
-        const data = await res.json();
-        setUrl(data.videoUrl);
-        loadSource(data.videoUrl);
-      } catch (error) {
-        console.log(error);
-      }
-    };
-    fecthVideoUrl();
+    socket.emit("getvideourl", { id: socket.id });
 
     return () => {
       hlsRef.current?.destroy();
@@ -185,6 +168,11 @@ export default function Home() {
       setUrl(data.videoUrl);
       console.log("url changed", data.videoUrl);
       loadSource(data.videoUrl);
+    });
+
+    socket.on("getvideourl", (data: { videoUrl: string }) => {
+      loadSource(data.videoUrl);
+      setUrl(data.videoUrl);
     });
 
     return () => {
