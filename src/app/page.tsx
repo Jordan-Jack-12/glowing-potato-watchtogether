@@ -28,6 +28,8 @@ type PlayBackType = {
 export default function Home() {
   const videoRef = useRef<null | HTMLVideoElement>(null);
   const videoContainerRef = useRef<null | HTMLDivElement>(null);
+  const hlsRef = useRef<null | Hls>(null);
+  const [url, setUrl] = useState("");
   const [isMaximize, setIsMaximize] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -101,17 +103,39 @@ export default function Home() {
     };
   });
 
-  // HLS VIDEO PLAYER ===========================================================
   useEffect(() => {
+    const fecthVideoUrl = async () => {
+      try {
+        const apiUrl =
+          process.env.NEXT_PUBLIC_DEV_ENV === "1"
+            ? "http://localhost:3001"
+            : process.env.NEXT_PUBLIC_SOCKETURL;
+        const res = await fetch(`${apiUrl}/video-url`, {
+          method: "GET",
+        });
+
+        const data = await res.json();
+        setUrl(data.videoUrl);
+        loadSource(url);
+      } catch (error) {
+        console.log(error);
+      }
+    };
+    fecthVideoUrl();
+  }, [url]);
+
+  // HLS VIDEO PLAYER ===========================================================
+  const loadSource = (url: string) => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+    }
     if (Hls.isSupported()) {
-      console.log("Hello HLS.js!");
       const hls = new Hls();
-      hls.loadSource(
-        "https://jordan-jack-12.github.io/media-server-personal/hls/output.m3u8",
-      );
+      hlsRef.current = hls;
+      hls.loadSource(url);
       hls.attachMedia(videoRef.current!);
     }
-  }, []);
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -153,11 +177,17 @@ export default function Home() {
       }
     });
 
+    socket.on("videourlchange", (data: { videoUrl: string }) => {
+      setUrl(data.videoUrl);
+      console.log("url changed", data.videoUrl);
+      loadSource(url);
+    });
+
     return () => {
       socket.off("connect");
       socket.off("playback");
     };
-  }, []);
+  }, [url]);
 
   return (
     <div
