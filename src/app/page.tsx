@@ -109,20 +109,24 @@ export default function Home() {
         const apiUrl =
           process.env.NEXT_PUBLIC_DEV_ENV === "1"
             ? "http://localhost:3001"
-            : process.env.NEXT_PUBLIC_SOCKETURL;
+            : process.env.NEXT_PUBLIC_SOCKETURL!;
         const res = await fetch(`${apiUrl}/video-url`, {
           method: "GET",
         });
 
         const data = await res.json();
         setUrl(data.videoUrl);
-        loadSource(url);
+        loadSource(data.videoUrl);
       } catch (error) {
         console.log(error);
       }
     };
     fecthVideoUrl();
-  }, [url]);
+
+    return () => {
+      hlsRef.current?.destroy();
+    };
+  }, []);
 
   // HLS VIDEO PLAYER ===========================================================
   const loadSource = (url: string) => {
@@ -180,14 +184,14 @@ export default function Home() {
     socket.on("videourlchange", (data: { videoUrl: string }) => {
       setUrl(data.videoUrl);
       console.log("url changed", data.videoUrl);
-      loadSource(url);
+      loadSource(data.videoUrl);
     });
 
     return () => {
       socket.off("connect");
       socket.off("playback");
     };
-  }, [url]);
+  }, []);
 
   return (
     <div
@@ -311,6 +315,7 @@ export default function Home() {
           {isMaximize ? <Minimize /> : <Maximize />}
         </button>
       </div>
+      <div className="w-full text-center text-white">{url}</div>
     </div>
   );
 }
