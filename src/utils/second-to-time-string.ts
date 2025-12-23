@@ -7,6 +7,6 @@ export function TimeString(given_seconds: number) {
     ":" +
     minutes.toString().padStart(2, "0") +
     ":" +
-    seconds.toString().padStart(2, "0");
+    seconds.toString().padStart(2, "0").slice(0,2);
   return timeString;
 }
