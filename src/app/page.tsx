@@ -34,6 +34,7 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoTotalTime, setVideoTotalTime] = useState(0);
+  const [error, setError] = useState<string | null>();
 
   // PLAYBACK FUNCTIONS FOR BUTTON =============================================
   const handlePlayPause = () => {
@@ -83,6 +84,7 @@ export default function Home() {
         videoContainer.requestFullscreen();
       } else {
         setIsMaximize(false);
+
         document.exitFullscreen();
       }
     }
@@ -90,10 +92,13 @@ export default function Home() {
 
   useEffect(() => {
     const handleFullscreenChange = () => {
+      const videoContainer = videoContainerRef.current;
       if (document.fullscreenElement != null) {
         setIsMaximize(true);
+        videoContainer?.classList.add("cursor-none");
       } else {
         setIsMaximize(false);
+        videoContainer?.classList.remove("cursor-none");
       }
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -141,6 +146,11 @@ export default function Home() {
   useEffect(() => {
     socket.on("connect", () => {
       console.log("Connection established");
+      setError(null);
+    });
+
+    socket.on("connect_error", () => {
+      setError("Can't connect to server or Server is not running.");
     });
 
     // LISTENING FROM THE SERVER ===================================================
@@ -168,16 +178,34 @@ export default function Home() {
       setUrl(data.videoUrl);
       console.log("url changed", data.videoUrl);
       loadSource(data.videoUrl);
+      setError(null);
     });
 
     socket.on("getvideourl", (data: { videoUrl: string }) => {
       loadSource(data.videoUrl);
       setUrl(data.videoUrl);
+      setError(null);
     });
 
     return () => {
       socket.off("connect");
       socket.off("playback");
+    };
+  }, []);
+
+  // MOUSE HANDLING ON FULLSCREEN ===================
+  useEffect(() => {
+    const videoContainer = videoContainerRef.current;
+    function mouseMovingFunc() {
+      if (videoContainer && videoContainer.classList.contains("cursor-none")) {
+        console.log(videoContainer.classList.contains("cursor-none"));
+        videoContainer.classList.remove("cursor-none");
+      }
+    }
+    document.addEventListener("mousemove", mouseMovingFunc);
+
+    return () => {
+      document.removeEventListener("mousemove", mouseMovingFunc);
     };
   }, []);
 
@@ -193,6 +221,7 @@ export default function Home() {
         height: "100%",
       }}
     >
+      <h2 className="text-red-500">{error && error}</h2>
       <div
         className="relative"
         ref={videoContainerRef}
